@@ -33,60 +33,146 @@ def extract_pose_landmarks(results):
     return landmarks
 
 def extract_holistic_landmarks(results):
-    """Trích xuất tất cả landmarks từ holistic (pose + hands + face) với chi tiết ngón tay"""
+    """Trích xuất tất cả landmarks từ holistic (pose + hands + face) đồng bộ với Mixamo bone structure"""
     
-    # Mapping tên các landmarks cho tay (21 điểm cho mỗi tay)
+    # Cấu trúc hierarchy xương Mixamo chuẩn
+    mixamo_hierarchy = {
+        "Hips": {  # Root bone
+            "children": ["Spine", "LeftUpLeg", "RightUpLeg"]
+        },
+        "Spine": {
+            "children": ["Spine1", "Spine2", "Neck", "LeftShoulder", "RightShoulder"]
+        },
+        "Neck": {
+            "children": ["Head"]
+        },
+        "Head": {
+            "children": ["LeftEye", "RightEye"]
+        },
+        "LeftShoulder": {
+            "children": ["LeftArm"]
+        },
+        "LeftArm": {
+            "children": ["LeftForeArm"]
+        },
+        "LeftForeArm": {
+            "children": ["LeftHand"]
+        },
+        "LeftHand": {
+            "children": ["LeftHandThumb1", "LeftHandIndex1", "LeftHandMiddle1", "LeftHandRing1", "LeftHandPinky1"]
+        },
+        "RightShoulder": {
+            "children": ["RightArm"]
+        },
+        "RightArm": {
+            "children": ["RightForeArm"]
+        },
+        "RightForeArm": {
+            "children": ["RightHand"]
+        },
+        "RightHand": {
+            "children": ["RightHandThumb1", "RightHandIndex1", "RightHandMiddle1", "RightHandRing1", "RightHandPinky1"]
+        },
+        "LeftUpLeg": {
+            "children": ["LeftLeg"]
+        },
+        "LeftLeg": {
+            "children": ["LeftFoot"]
+        },
+        "LeftFoot": {
+            "children": ["LeftToeBase"]
+        },
+        "RightUpLeg": {
+            "children": ["RightLeg"]
+        },
+        "RightLeg": {
+            "children": ["RightFoot"]
+        },
+        "RightFoot": {
+            "children": ["RightToeBase"]
+        }
+    }
+    
+    # Mapping tên các landmarks cho tay theo chuẩn Mixamo (21 điểm cho mỗi tay)
     hand_landmark_names = [
-        "wrist",           # 0  - Cổ tay
-        "thumb_cmc",       # 1  - Thumb Carpometacarpal (khớp gốc ngón cái)
-        "thumb_mcp",       # 2  - Thumb Metacarpophalangeal (khớp giữa ngón cái)
-        "thumb_ip",        # 3  - Thumb Interphalangeal (khớp ngón cái)
-        "thumb_tip",       # 4  - Đầu ngón cái
-        "index_mcp",       # 5  - Index Metacarpophalangeal (khớp gốc ngón trỏ)
-        "index_pip",       # 6  - Index Proximal Interphalangeal (khớp giữa ngón trỏ)
-        "index_dip",       # 7  - Index Distal Interphalangeal (khớp đầu ngón trỏ)
-        "index_tip",       # 8  - Đầu ngón trỏ
-        "middle_mcp",      # 9  - Middle Metacarpophalangeal (khớp gốc ngón giữa)
-        "middle_pip",      # 10 - Middle Proximal Interphalangeal (khớp giữa ngón giữa)
-        "middle_dip",      # 11 - Middle Distal Interphalangeal (khớp đầu ngón giữa)
-        "middle_tip",      # 12 - Đầu ngón giữa
-        "ring_mcp",        # 13 - Ring Metacarpophalangeal (khớp gốc ngón áp út)
-        "ring_pip",        # 14 - Ring Proximal Interphalangeal (khớp giữa ngón áp út)
-        "ring_dip",        # 15 - Ring Distal Interphalangeal (khớp đầu ngón áp út)
-        "ring_tip",        # 16 - Đầu ngón áp út
-        "pinky_mcp",       # 17 - Pinky Metacarpophalangeal (khớp gốc ngón út)
-        "pinky_pip",       # 18 - Pinky Proximal Interphalangeal (khớp giữa ngón út)
-        "pinky_dip",       # 19 - Pinky Distal Interphalangeal (khớp đầu ngón út)
-        "pinky_tip"        # 20 - Đầu ngón út
+        "Hand",            # 0  - Cổ tay -> Hand (wrist)
+        "HandThumb1",      # 1  - Thumb Carpometacarpal -> HandThumb1
+        "HandThumb2",      # 2  - Thumb Metacarpophalangeal -> HandThumb2  
+        "HandThumb3",      # 3  - Thumb Interphalangeal -> HandThumb3
+        "HandThumb4",      # 4  - Đầu ngón cái -> HandThumb4 (tip)
+        "HandIndex1",      # 5  - Index Metacarpophalangeal -> HandIndex1
+        "HandIndex2",      # 6  - Index Proximal Interphalangeal -> HandIndex2
+        "HandIndex3",      # 7  - Index Distal Interphalangeal -> HandIndex3
+        "HandIndex4",      # 8  - Đầu ngón trỏ -> HandIndex4 (tip)
+        "HandMiddle1",     # 9  - Middle Metacarpophalangeal -> HandMiddle1
+        "HandMiddle2",     # 10 - Middle Proximal Interphalangeal -> HandMiddle2
+        "HandMiddle3",     # 11 - Middle Distal Interphalangeal -> HandMiddle3
+        "HandMiddle4",     # 12 - Đầu ngón giữa -> HandMiddle4 (tip)
+        "HandRing1",       # 13 - Ring Metacarpophalangeal -> HandRing1
+        "HandRing2",       # 14 - Ring Proximal Interphalangeal -> HandRing2
+        "HandRing3",       # 15 - Ring Distal Interphalangeal -> HandRing3
+        "HandRing4",       # 16 - Đầu ngón áp út -> HandRing4 (tip)
+        "HandPinky1",      # 17 - Pinky Metacarpophalangeal -> HandPinky1
+        "HandPinky2",      # 18 - Pinky Proximal Interphalangeal -> HandPinky2
+        "HandPinky3",      # 19 - Pinky Distal Interphalangeal -> HandPinky3
+        "HandPinky4"       # 20 - Đầu ngón út -> HandPinky4 (tip)
     ]
     
-    # Mapping tên các landmarks cho pose (33 điểm chính)
+    # Mapping tên các landmarks cho pose theo chuẩn Mixamo (33 điểm chính)
     pose_landmark_names = [
-        "nose", "left_eye_inner", "left_eye", "left_eye_outer",
-        "right_eye_inner", "right_eye", "right_eye_outer",
-        "left_ear", "right_ear", "mouth_left", "mouth_right",
-        "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
-        "left_wrist", "right_wrist", "left_pinky", "right_pinky",
-        "left_index", "right_index", "left_thumb", "right_thumb",
-        "left_hip", "right_hip", "left_knee", "right_knee",
-        "left_ankle", "right_ankle", "left_heel", "right_heel",
-        "left_foot_index", "right_foot_index"
+        "Head",                    # 0  - nose -> Head
+        "LeftEye",                 # 1  - left_eye_inner -> LeftEye  
+        "LeftEye",                 # 2  - left_eye -> LeftEye
+        "LeftEye",                 # 3  - left_eye_outer -> LeftEye
+        "RightEye",                # 4  - right_eye_inner -> RightEye
+        "RightEye",                # 5  - right_eye -> RightEye
+        "RightEye",                # 6  - right_eye_outer -> RightEye
+        "Head",                    # 7  - left_ear -> Head
+        "Head",                    # 8  - right_ear -> Head
+        "Head",                    # 9  - mouth_left -> Head
+        "Head",                    # 10 - mouth_right -> Head
+        "LeftShoulder",            # 11 - left_shoulder -> LeftShoulder
+        "RightShoulder",           # 12 - right_shoulder -> RightShoulder
+        "LeftArm",                 # 13 - left_elbow -> LeftArm (elbow)
+        "RightArm",                # 14 - right_elbow -> RightArm (elbow)
+        "LeftForeArm",             # 15 - left_wrist -> LeftForeArm (wrist)
+        "RightForeArm",            # 16 - right_wrist -> RightForeArm (wrist)
+        "LeftHand",                # 17 - left_pinky -> LeftHand
+        "RightHand",               # 18 - right_pinky -> RightHand
+        "LeftHand",                # 19 - left_index -> LeftHand
+        "RightHand",               # 20 - right_index -> RightHand
+        "LeftHand",                # 21 - left_thumb -> LeftHand
+        "RightHand",               # 22 - right_thumb -> RightHand
+        "LeftUpLeg",               # 23 - left_hip -> LeftUpLeg (hip)
+        "RightUpLeg",              # 24 - right_hip -> RightUpLeg (hip)
+        "LeftLeg",                 # 25 - left_knee -> LeftLeg (knee)
+        "RightLeg",                # 26 - right_knee -> RightLeg (knee)
+        "LeftFoot",                # 27 - left_ankle -> LeftFoot (ankle)
+        "RightFoot",               # 28 - right_ankle -> RightFoot (ankle)
+        "LeftFoot",                # 29 - left_heel -> LeftFoot
+        "RightFoot",               # 30 - right_heel -> RightFoot
+        "LeftToeBase",             # 31 - left_foot_index -> LeftToeBase
+        "RightToeBase"             # 32 - right_foot_index -> RightToeBase
     ]
     
     data = {
+        "mixamo_hierarchy": mixamo_hierarchy,  # Cấu trúc xương Mixamo
         "pose": {
             "landmarks": [],
-            "detailed": {}
+            "detailed": {},
+            "mixamo_bones": {}  # Mapping theo tên xương Mixamo
         },
         "left_hand": {
             "landmarks": [],
             "detailed": {},
-            "fingers": {}
+            "fingers": {},
+            "mixamo_bones": {}  # Mapping theo tên xương Mixamo
         },
         "right_hand": {
             "landmarks": [],
             "detailed": {},
-            "fingers": {}
+            "fingers": {},
+            "mixamo_bones": {}  # Mapping theo tên xương Mixamo
         },
         "face": []
     }
@@ -100,11 +186,23 @@ def extract_holistic_landmarks(results):
         # Chi tiết từng landmark
         for i, landmark in enumerate(results.pose_landmarks.landmark):
             landmark_name = pose_landmark_names[i] if i < len(pose_landmark_names) else f"pose_landmark_{i}"
+            mixamo_bone_name = pose_landmark_names[i] if i < len(pose_landmark_names) else f"UnknownBone_{i}"
+            
             data["pose"]["detailed"][landmark_name] = {
                 "index": i,
                 "coordinates": [float(landmark.x), float(landmark.y), float(landmark.z)],
-                "visibility": float(landmark.visibility)
+                "visibility": float(landmark.visibility),
+                "mixamo_bone": mixamo_bone_name
             }
+            
+            # Mapping theo tên xương Mixamo
+            if mixamo_bone_name not in data["pose"]["mixamo_bones"]:
+                data["pose"]["mixamo_bones"][mixamo_bone_name] = []
+            data["pose"]["mixamo_bones"][mixamo_bone_name].append({
+                "mediapipe_index": i,
+                "coordinates": [float(landmark.x), float(landmark.y), float(landmark.z)],
+                "visibility": float(landmark.visibility)
+            })
     
     # Left hand landmarks với chi tiết ngón tay
     if results.left_hand_landmarks:
@@ -115,115 +213,149 @@ def extract_holistic_landmarks(results):
         # Chi tiết từng landmark
         for i, landmark in enumerate(results.left_hand_landmarks.landmark):
             landmark_name = hand_landmark_names[i] if i < len(hand_landmark_names) else f"hand_landmark_{i}"
+            mixamo_bone_name = f"Left{hand_landmark_names[i]}" if i < len(hand_landmark_names) else f"LeftUnknownBone_{i}"
+            
             data["left_hand"]["detailed"][landmark_name] = {
                 "index": i,
+                "coordinates": [float(landmark.x), float(landmark.y), float(landmark.z)],
+                "mixamo_bone": mixamo_bone_name
+            }
+            
+            # Mapping theo tên xương Mixamo
+            data["left_hand"]["mixamo_bones"][mixamo_bone_name] = {
+                "mediapipe_index": i,
                 "coordinates": [float(landmark.x), float(landmark.y), float(landmark.z)]
             }
         
-        # Nhóm theo ngón tay với tên tiếng Việt
+        # Nhóm theo ngón tay với tên Mixamo
         data["left_hand"]["fingers"] = {
             "thumb": {  # Ngón cái
                 "name_vi": "Ngón cái",
+                "mixamo_bone_prefix": "LeftHandThumb",
                 "joints": {
-                    "cmc": {
+                    "joint1": {
                         "name_vi": "Khớp gốc",
-                        "coordinates": data["left_hand"]["detailed"]["thumb_cmc"]["coordinates"]
+                        "mixamo_bone": "LeftHandThumb1",
+                        "coordinates": data["left_hand"]["detailed"]["HandThumb1"]["coordinates"]
                     },
-                    "mcp": {
+                    "joint2": {
                         "name_vi": "Khớp giữa",
-                        "coordinates": data["left_hand"]["detailed"]["thumb_mcp"]["coordinates"]
+                        "mixamo_bone": "LeftHandThumb2",
+                        "coordinates": data["left_hand"]["detailed"]["HandThumb2"]["coordinates"]
                     },
-                    "ip": {
+                    "joint3": {
                         "name_vi": "Khớp đầu",
-                        "coordinates": data["left_hand"]["detailed"]["thumb_ip"]["coordinates"]
+                        "mixamo_bone": "LeftHandThumb3",
+                        "coordinates": data["left_hand"]["detailed"]["HandThumb3"]["coordinates"]
                     },
                     "tip": {
                         "name_vi": "Đầu ngón",
-                        "coordinates": data["left_hand"]["detailed"]["thumb_tip"]["coordinates"]
+                        "mixamo_bone": "LeftHandThumb4",
+                        "coordinates": data["left_hand"]["detailed"]["HandThumb4"]["coordinates"]
                     }
                 }
             },
             "index": {  # Ngón trỏ
                 "name_vi": "Ngón trỏ",
+                "mixamo_bone_prefix": "LeftHandIndex",
                 "joints": {
-                    "mcp": {
+                    "joint1": {
                         "name_vi": "Khớp gốc",
-                        "coordinates": data["left_hand"]["detailed"]["index_mcp"]["coordinates"]
+                        "mixamo_bone": "LeftHandIndex1",
+                        "coordinates": data["left_hand"]["detailed"]["HandIndex1"]["coordinates"]
                     },
-                    "pip": {
+                    "joint2": {
                         "name_vi": "Khớp giữa",
-                        "coordinates": data["left_hand"]["detailed"]["index_pip"]["coordinates"]
+                        "mixamo_bone": "LeftHandIndex2",
+                        "coordinates": data["left_hand"]["detailed"]["HandIndex2"]["coordinates"]
                     },
-                    "dip": {
+                    "joint3": {
                         "name_vi": "Khớp đầu",
-                        "coordinates": data["left_hand"]["detailed"]["index_dip"]["coordinates"]
+                        "mixamo_bone": "LeftHandIndex3",
+                        "coordinates": data["left_hand"]["detailed"]["HandIndex3"]["coordinates"]
                     },
                     "tip": {
                         "name_vi": "Đầu ngón",
-                        "coordinates": data["left_hand"]["detailed"]["index_tip"]["coordinates"]
+                        "mixamo_bone": "LeftHandIndex4",
+                        "coordinates": data["left_hand"]["detailed"]["HandIndex4"]["coordinates"]
                     }
                 }
             },
             "middle": {  # Ngón giữa
                 "name_vi": "Ngón giữa",
+                "mixamo_bone_prefix": "LeftHandMiddle",
                 "joints": {
-                    "mcp": {
+                    "joint1": {
                         "name_vi": "Khớp gốc",
-                        "coordinates": data["left_hand"]["detailed"]["middle_mcp"]["coordinates"]
+                        "mixamo_bone": "LeftHandMiddle1",
+                        "coordinates": data["left_hand"]["detailed"]["HandMiddle1"]["coordinates"]
                     },
-                    "pip": {
+                    "joint2": {
                         "name_vi": "Khớp giữa",
-                        "coordinates": data["left_hand"]["detailed"]["middle_pip"]["coordinates"]
+                        "mixamo_bone": "LeftHandMiddle2",
+                        "coordinates": data["left_hand"]["detailed"]["HandMiddle2"]["coordinates"]
                     },
-                    "dip": {
+                    "joint3": {
                         "name_vi": "Khớp đầu",
-                        "coordinates": data["left_hand"]["detailed"]["middle_dip"]["coordinates"]
+                        "mixamo_bone": "LeftHandMiddle3",
+                        "coordinates": data["left_hand"]["detailed"]["HandMiddle3"]["coordinates"]
                     },
                     "tip": {
                         "name_vi": "Đầu ngón",
-                        "coordinates": data["left_hand"]["detailed"]["middle_tip"]["coordinates"]
+                        "mixamo_bone": "LeftHandMiddle4",
+                        "coordinates": data["left_hand"]["detailed"]["HandMiddle4"]["coordinates"]
                     }
                 }
             },
             "ring": {  # Ngón áp út
                 "name_vi": "Ngón áp út",
+                "mixamo_bone_prefix": "LeftHandRing",
                 "joints": {
-                    "mcp": {
+                    "joint1": {
                         "name_vi": "Khớp gốc",
-                        "coordinates": data["left_hand"]["detailed"]["ring_mcp"]["coordinates"]
+                        "mixamo_bone": "LeftHandRing1",
+                        "coordinates": data["left_hand"]["detailed"]["HandRing1"]["coordinates"]
                     },
-                    "pip": {
+                    "joint2": {
                         "name_vi": "Khớp giữa",
-                        "coordinates": data["left_hand"]["detailed"]["ring_pip"]["coordinates"]
+                        "mixamo_bone": "LeftHandRing2",
+                        "coordinates": data["left_hand"]["detailed"]["HandRing2"]["coordinates"]
                     },
-                    "dip": {
+                    "joint3": {
                         "name_vi": "Khớp đầu",
-                        "coordinates": data["left_hand"]["detailed"]["ring_dip"]["coordinates"]
+                        "mixamo_bone": "LeftHandRing3",
+                        "coordinates": data["left_hand"]["detailed"]["HandRing3"]["coordinates"]
                     },
                     "tip": {
                         "name_vi": "Đầu ngón",
-                        "coordinates": data["left_hand"]["detailed"]["ring_tip"]["coordinates"]
+                        "mixamo_bone": "LeftHandRing4",
+                        "coordinates": data["left_hand"]["detailed"]["HandRing4"]["coordinates"]
                     }
                 }
             },
             "pinky": {  # Ngón út
                 "name_vi": "Ngón út",
+                "mixamo_bone_prefix": "LeftHandPinky",
                 "joints": {
-                    "mcp": {
+                    "joint1": {
                         "name_vi": "Khớp gốc",
-                        "coordinates": data["left_hand"]["detailed"]["pinky_mcp"]["coordinates"]
+                        "mixamo_bone": "LeftHandPinky1",
+                        "coordinates": data["left_hand"]["detailed"]["HandPinky1"]["coordinates"]
                     },
-                    "pip": {
+                    "joint2": {
                         "name_vi": "Khớp giữa",
-                        "coordinates": data["left_hand"]["detailed"]["pinky_pip"]["coordinates"]
+                        "mixamo_bone": "LeftHandPinky2",
+                        "coordinates": data["left_hand"]["detailed"]["HandPinky2"]["coordinates"]
                     },
-                    "dip": {
+                    "joint3": {
                         "name_vi": "Khớp đầu",
-                        "coordinates": data["left_hand"]["detailed"]["pinky_dip"]["coordinates"]
+                        "mixamo_bone": "LeftHandPinky3",
+                        "coordinates": data["left_hand"]["detailed"]["HandPinky3"]["coordinates"]
                     },
                     "tip": {
                         "name_vi": "Đầu ngón",
-                        "coordinates": data["left_hand"]["detailed"]["pinky_tip"]["coordinates"]
+                        "mixamo_bone": "LeftHandPinky4",
+                        "coordinates": data["left_hand"]["detailed"]["HandPinky4"]["coordinates"]
                     }
                 }
             }
@@ -238,115 +370,149 @@ def extract_holistic_landmarks(results):
         # Chi tiết từng landmark
         for i, landmark in enumerate(results.right_hand_landmarks.landmark):
             landmark_name = hand_landmark_names[i] if i < len(hand_landmark_names) else f"hand_landmark_{i}"
+            mixamo_bone_name = f"Right{hand_landmark_names[i]}" if i < len(hand_landmark_names) else f"RightUnknownBone_{i}"
+            
             data["right_hand"]["detailed"][landmark_name] = {
                 "index": i,
+                "coordinates": [float(landmark.x), float(landmark.y), float(landmark.z)],
+                "mixamo_bone": mixamo_bone_name
+            }
+            
+            # Mapping theo tên xương Mixamo
+            data["right_hand"]["mixamo_bones"][mixamo_bone_name] = {
+                "mediapipe_index": i,
                 "coordinates": [float(landmark.x), float(landmark.y), float(landmark.z)]
             }
         
-        # Nhóm theo ngón tay với tên tiếng Việt
+        # Nhóm theo ngón tay với tên Mixamo
         data["right_hand"]["fingers"] = {
             "thumb": {
                 "name_vi": "Ngón cái",
+                "mixamo_bone_prefix": "RightHandThumb",
                 "joints": {
-                    "cmc": {
+                    "joint1": {
                         "name_vi": "Khớp gốc",
-                        "coordinates": data["right_hand"]["detailed"]["thumb_cmc"]["coordinates"]
+                        "mixamo_bone": "RightHandThumb1",
+                        "coordinates": data["right_hand"]["detailed"]["HandThumb1"]["coordinates"]
                     },
-                    "mcp": {
+                    "joint2": {
                         "name_vi": "Khớp giữa",
-                        "coordinates": data["right_hand"]["detailed"]["thumb_mcp"]["coordinates"]
+                        "mixamo_bone": "RightHandThumb2",
+                        "coordinates": data["right_hand"]["detailed"]["HandThumb2"]["coordinates"]
                     },
-                    "ip": {
+                    "joint3": {
                         "name_vi": "Khớp đầu",
-                        "coordinates": data["right_hand"]["detailed"]["thumb_ip"]["coordinates"]
+                        "mixamo_bone": "RightHandThumb3",
+                        "coordinates": data["right_hand"]["detailed"]["HandThumb3"]["coordinates"]
                     },
                     "tip": {
                         "name_vi": "Đầu ngón",
-                        "coordinates": data["right_hand"]["detailed"]["thumb_tip"]["coordinates"]
+                        "mixamo_bone": "RightHandThumb4",
+                        "coordinates": data["right_hand"]["detailed"]["HandThumb4"]["coordinates"]
                     }
                 }
             },
             "index": {
                 "name_vi": "Ngón trỏ",
+                "mixamo_bone_prefix": "RightHandIndex",
                 "joints": {
-                    "mcp": {
+                    "joint1": {
                         "name_vi": "Khớp gốc",
-                        "coordinates": data["right_hand"]["detailed"]["index_mcp"]["coordinates"]
+                        "mixamo_bone": "RightHandIndex1",
+                        "coordinates": data["right_hand"]["detailed"]["HandIndex1"]["coordinates"]
                     },
-                    "pip": {
+                    "joint2": {
                         "name_vi": "Khớp giữa",
-                        "coordinates": data["right_hand"]["detailed"]["index_pip"]["coordinates"]
+                        "mixamo_bone": "RightHandIndex2",
+                        "coordinates": data["right_hand"]["detailed"]["HandIndex2"]["coordinates"]
                     },
-                    "dip": {
+                    "joint3": {
                         "name_vi": "Khớp đầu",
-                        "coordinates": data["right_hand"]["detailed"]["index_dip"]["coordinates"]
+                        "mixamo_bone": "RightHandIndex3",
+                        "coordinates": data["right_hand"]["detailed"]["HandIndex3"]["coordinates"]
                     },
                     "tip": {
                         "name_vi": "Đầu ngón",
-                        "coordinates": data["right_hand"]["detailed"]["index_tip"]["coordinates"]
+                        "mixamo_bone": "RightHandIndex4",
+                        "coordinates": data["right_hand"]["detailed"]["HandIndex4"]["coordinates"]
                     }
                 }
             },
             "middle": {
                 "name_vi": "Ngón giữa",
+                "mixamo_bone_prefix": "RightHandMiddle",
                 "joints": {
-                    "mcp": {
+                    "joint1": {
                         "name_vi": "Khớp gốc",
-                        "coordinates": data["right_hand"]["detailed"]["middle_mcp"]["coordinates"]
+                        "mixamo_bone": "RightHandMiddle1",
+                        "coordinates": data["right_hand"]["detailed"]["HandMiddle1"]["coordinates"]
                     },
-                    "pip": {
+                    "joint2": {
                         "name_vi": "Khớp giữa",
-                        "coordinates": data["right_hand"]["detailed"]["middle_pip"]["coordinates"]
+                        "mixamo_bone": "RightHandMiddle2",
+                        "coordinates": data["right_hand"]["detailed"]["HandMiddle2"]["coordinates"]
                     },
-                    "dip": {
+                    "joint3": {
                         "name_vi": "Khớp đầu",
-                        "coordinates": data["right_hand"]["detailed"]["middle_dip"]["coordinates"]
+                        "mixamo_bone": "RightHandMiddle3",
+                        "coordinates": data["right_hand"]["detailed"]["HandMiddle3"]["coordinates"]
                     },
                     "tip": {
                         "name_vi": "Đầu ngón",
-                        "coordinates": data["right_hand"]["detailed"]["middle_tip"]["coordinates"]
+                        "mixamo_bone": "RightHandMiddle4",
+                        "coordinates": data["right_hand"]["detailed"]["HandMiddle4"]["coordinates"]
                     }
                 }
             },
             "ring": {
                 "name_vi": "Ngón áp út",
+                "mixamo_bone_prefix": "RightHandRing",
                 "joints": {
-                    "mcp": {
+                    "joint1": {
                         "name_vi": "Khớp gốc",
-                        "coordinates": data["right_hand"]["detailed"]["ring_mcp"]["coordinates"]
+                        "mixamo_bone": "RightHandRing1",
+                        "coordinates": data["right_hand"]["detailed"]["HandRing1"]["coordinates"]
                     },
-                    "pip": {
+                    "joint2": {
                         "name_vi": "Khớp giữa",
-                        "coordinates": data["right_hand"]["detailed"]["ring_pip"]["coordinates"]
+                        "mixamo_bone": "RightHandRing2",
+                        "coordinates": data["right_hand"]["detailed"]["HandRing2"]["coordinates"]
                     },
-                    "dip": {
+                    "joint3": {
                         "name_vi": "Khớp đầu",
-                        "coordinates": data["right_hand"]["detailed"]["ring_dip"]["coordinates"]
+                        "mixamo_bone": "RightHandRing3",
+                        "coordinates": data["right_hand"]["detailed"]["HandRing3"]["coordinates"]
                     },
                     "tip": {
                         "name_vi": "Đầu ngón",
-                        "coordinates": data["right_hand"]["detailed"]["ring_tip"]["coordinates"]
+                        "mixamo_bone": "RightHandRing4",
+                        "coordinates": data["right_hand"]["detailed"]["HandRing4"]["coordinates"]
                     }
                 }
             },
             "pinky": {
                 "name_vi": "Ngón út",
+                "mixamo_bone_prefix": "RightHandPinky",
                 "joints": {
-                    "mcp": {
+                    "joint1": {
                         "name_vi": "Khớp gốc",
-                        "coordinates": data["right_hand"]["detailed"]["pinky_mcp"]["coordinates"]
+                        "mixamo_bone": "RightHandPinky1",
+                        "coordinates": data["right_hand"]["detailed"]["HandPinky1"]["coordinates"]
                     },
-                    "pip": {
+                    "joint2": {
                         "name_vi": "Khớp giữa",
-                        "coordinates": data["right_hand"]["detailed"]["pinky_pip"]["coordinates"]
+                        "mixamo_bone": "RightHandPinky2",
+                        "coordinates": data["right_hand"]["detailed"]["HandPinky2"]["coordinates"]
                     },
-                    "dip": {
+                    "joint3": {
                         "name_vi": "Khớp đầu",
-                        "coordinates": data["right_hand"]["detailed"]["pinky_dip"]["coordinates"]
+                        "mixamo_bone": "RightHandPinky3",
+                        "coordinates": data["right_hand"]["detailed"]["HandPinky3"]["coordinates"]
                     },
                     "tip": {
                         "name_vi": "Đầu ngón",
-                        "coordinates": data["right_hand"]["detailed"]["pinky_tip"]["coordinates"]
+                        "mixamo_bone": "RightHandPinky4",
+                        "coordinates": data["right_hand"]["detailed"]["HandPinky4"]["coordinates"]
                     }
                 }
             }
