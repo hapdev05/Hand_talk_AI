@@ -9,7 +9,7 @@ mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
 
 # Cấu hình đường dẫn
-video_path = "xang.mp4"  # Đường dẫn video đầu vào
+video_path = "anvung.mp4"  # Đường dẫn video đầu vào
 output_json = "pose_analysis.json"  # File JSON đầu ra
 
 print("🎬 Bắt đầu phân tích pose từ video...")
