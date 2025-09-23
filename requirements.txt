@@ -1,0 +1,7 @@
+opencv-python
+mediapipe
+numpy
+requests
+tqdm
+urllib3
+openai-whisper
